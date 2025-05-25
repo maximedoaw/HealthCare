@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+[x]Landing page
+[]Authentification
+[]Choix du médécin et rendez vous fixez
+[]Constitution du dossier médicale du patient et production d'ordonnance
+[]Notifier au medecin qu'il a rendez vous avec un patient
+[]Notifier au patient le refus ou l'acceptation du medecin pour une consultation 
+[]Historique des consultations pour  le medecin comme pour le patient
+[]Fonctionnalites AI
+[]Admin dashBoard
+[]Bannisement d'utilisateur
+[]Note pour un medecin en fonction de ses competences et de l'appreciation que les patients en font
+[]inclure un plan free et un plan pro
 
-## Getting Started
+Donnons nous 1 mois et demi
 
-First, run the development server:
+📝 Cahier des Charges – Application de Gestion des Dossiers Médicaux
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Présentation du projet
+Créer une application web responsive permettant la gestion sécurisée des dossiers médicaux, incluant une recherche intelligente par IA en langage naturel, à destination des professionnels de santé.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Objectifs
+Création, consultation et modification des dossiers médicaux.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Authentification sécurisée pour différents rôles (médecins, assistants, admin).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Recherche par requêtes en langage naturel via IA (Langchain + OpenAI).
 
-## Learn More
+Stockage sécurisé des données (Firebase).
 
-To learn more about Next.js, take a look at the following resources:
+UI moderne et responsive (Tailwind CSS).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Performances et scalabilité via Next.js et Typescript.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Fonctionnalités principales
+Utilisateurs :
+Inscription / Connexion (auth Firebase)
 
-## Deploy on Vercel
+Gestion de profil
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Gestion des droits d'accès (admin, médecin, etc.)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dossiers médicaux :
+Création d’un dossier (nom, antécédents, diagnostics, ordonnances…)
+
+Ajout de pièces jointes (PDF, imagerie…)
+
+Historique des modifications
+
+Recherche :
+Barre de recherche avec compréhension en langage naturel
+
+Exemple : “Montre-moi tous les patients diabétiques traités en 2024”
+
+Utilisation de Langchain + OpenAI embeddings
+
+Notifications :
+Rappels de rendez-vous
+
+Alertes de mise à jour de dossier
+
+4. Stack Technique
+Composant	Technologie
+Frontend	Next.js (App Router)
+Langage	TypeScript
+UI/UX	Tailwind CSS
+Backend/DB	Firebase (Auth, Firestore, Storage)
+IA/NLP	Langchain + OpenAI (embeddings, LLM)
+Vector DB	Intégration Firebase + stockage vecteur custom si besoin
+Authentification	Firebase Auth
+
+5. Architecture technique
+Frontend : Next.js, pages SSR/ISR pour scalabilité.
+
+Backend : Firebase Functions (si logique côté serveur nécessaire).
+
+Base de données : Firestore NoSQL, structurée par collection de patients.
+
+Stockage fichiers : Firebase Storage.
+
+IA / Recherche sémantique :
+
+Extraction du contenu des dossiers via parsing (PDF/texte).
+
+Génération des embeddings via OpenAI.
+
+Stockage indexé pour recherche avec Langchain.
+
+6. Sécurité & RGPD
+Données cryptées (au repos et en transit).
+
+Politique d’accès par rôles (RBAC).
+
+Journalisation des accès et modifications.
+
+Hébergement Firebase en région conforme (ex: europe-west).
+
+7. Livrables attendus
+Code source sur GitHub
+
+Documentation technique (README + schémas d’archi)
+
+Figma pour le design
+
+Rapport d’utilisation de l’IA (comment est indexée la data, précision, etc.)
+
+Démo déployée (Vercel / Firebase Hosting)
+
