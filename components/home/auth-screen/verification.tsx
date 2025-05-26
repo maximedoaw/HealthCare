@@ -2,21 +2,40 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
 import { create } from "zustand"
-import { doc, getDoc, runTransaction } from "firebase/firestore"
+import { doc, getDoc, runTransaction, setDoc } from "firebase/firestore"
 import { firestore } from "@/firebase/config"
 import type { OTPDocument } from "@/types"
+import toast from "react-hot-toast"
 
 import { RoleSelection } from "./role-selection"
 import { StaffSelection } from "./staff-selection"
 import { VerificationProcess } from "./verification-process"
+import { MedicalLoader } from "@/components/medical-loader"
 
 // Types
 type StaffRole = "Doctor" | "Nurse" | "Surgeon" | "Anesthesiologist" | "Radiologist" | "Intern" | "Administrator"
+type VerificationStatus = "pending" | "verified" | "rejected"
+
+interface VerificationFile {
+  fileName: string
+  fileData: string // Base64 encoded file data
+  uploadedAt: Date
+}
+
+interface VerificationStatusItem {
+  status: VerificationStatus
+  verifiedAt?: Date
+  verifiedBy?: string
+}
 
 interface ExtendedOTPDocument extends OTPDocument {
   staffType?: StaffRole
+  uploadedFiles?: {
+    diplome?: VerificationFile
+    identite?: VerificationFile
+    structure?: VerificationFile
+  }
 }
 
 interface VerificationState {
@@ -31,6 +50,16 @@ interface VerificationState {
     identite: boolean
     structure: boolean
   }
+  verificationStatuses: {
+    diplome?: VerificationStatusItem
+    identite?: VerificationStatusItem
+    structure?: VerificationStatusItem
+  }
+  uploadedFiles: {
+    diplome?: VerificationFile
+    identite?: VerificationFile
+    structure?: VerificationFile
+  }
   otpValues: string[]
   progress: number
 
@@ -41,16 +70,33 @@ interface VerificationState {
   setStaffType: (staffType: StaffRole | null) => void
   setStep: (step: number) => void
   setVerifications: (verifications: { diplome: boolean; identite: boolean; structure: boolean }) => void
+  setVerificationStatuses: (statuses: {
+    diplome?: VerificationStatusItem
+    identite?: VerificationStatusItem
+    structure?: VerificationStatusItem
+  }) => void
+  setUploadedFiles: (files: {
+    diplome?: VerificationFile
+    identite?: VerificationFile
+    structure?: VerificationFile
+  }) => void
   setOtpValues: (otpValues: string[]) => void
   setProgress: (progress: number) => void
 
   // Actions complexes
   calculateProgress: () => number
   checkVerificationStatus: (id: string) => Promise<boolean>
+  loadVerificationStatuses: (id: string) => Promise<void>
   saveProgress: (id: string, updates: Partial<ExtendedOTPDocument>) => Promise<void>
+  saveVerificationStatus: (
+    id: string,
+    type: keyof typeof initialVerifications,
+    status: VerificationStatusItem,
+  ) => Promise<void>
   handleRoleSelect: (id: string, value: "patient" | "personalMedical" | "admin") => Promise<void>
   handleStaffSelect: (id: string, staff: StaffRole) => Promise<void>
   handleVerificationToggle: (id: string, type: keyof typeof initialVerifications) => Promise<void>
+  handleFileUpload: (id: string, type: keyof typeof initialVerifications, file: File) => Promise<void>
   handleOtpChange: (id: string, index: number, value: string) => Promise<void>
   handleSubmit: (id: string) => Promise<void>
   resetState: () => void
@@ -61,6 +107,10 @@ const initialVerifications = {
   identite: false,
   structure: false,
 }
+
+const initialVerificationStatuses = {}
+
+const initialUploadedFiles = {}
 
 const initialOtpValues = ["", "", "", "", "", ""]
 
@@ -73,6 +123,8 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
   staffType: null,
   step: 1,
   verifications: initialVerifications,
+  verificationStatuses: initialVerificationStatuses,
+  uploadedFiles: initialUploadedFiles,
   otpValues: initialOtpValues,
   progress: 0,
 
@@ -83,6 +135,8 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
   setStaffType: (staffType) => set({ staffType }),
   setStep: (step) => set({ step }),
   setVerifications: (verifications) => set({ verifications }),
+  setVerificationStatuses: (verificationStatuses) => set({ verificationStatuses }),
+  setUploadedFiles: (uploadedFiles) => set({ uploadedFiles }),
   setOtpValues: (otpValues) => set({ otpValues }),
   setProgress: (progress) => set({ progress }),
 
@@ -126,6 +180,43 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
     return 0
   },
 
+  // Charger les statuts de vérification depuis la collection verifications
+  loadVerificationStatuses: async (id: string) => {
+    try {
+      const verificationStatusRef = doc(firestore, "verifications", id)
+      const verificationStatusSnap = await getDoc(verificationStatusRef)
+
+      if (verificationStatusSnap.exists()) {
+        const statusData = verificationStatusSnap.data()
+        set({ verificationStatuses: statusData })
+      }
+    } catch (error) {
+      console.error("Error loading verification statuses:", error)
+    }
+  },
+
+  // Sauvegarder le statut de vérification dans la collection verifications
+  saveVerificationStatus: async (
+    id: string,
+    type: keyof typeof initialVerifications,
+    status: VerificationStatusItem,
+  ) => {
+    try {
+      const { verificationStatuses } = get()
+      const newStatuses = {
+        ...verificationStatuses,
+        [type]: status,
+      }
+
+      const verificationStatusRef = doc(firestore, "verifications", id)
+      await setDoc(verificationStatusRef, newStatuses, { merge: true })
+
+      set({ verificationStatuses: newStatuses })
+    } catch (error) {
+      console.error("Error saving verification status:", error)
+    }
+  },
+
   // Vérification du statut
   checkVerificationStatus: async (id: string) => {
     try {
@@ -141,14 +232,18 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
         }
 
         // Restore previous progress
-        const { calculateProgress } = get()
+        const { calculateProgress, loadVerificationStatuses } = get()
         set({
           role: data.role,
           staffType: data.staffType || null,
           step: data.step,
           verifications: data.verifications,
+          uploadedFiles: data.uploadedFiles || {},
           otpValues: data.otpValues,
         })
+
+        // Load verification statuses from verifications collection
+        await loadVerificationStatuses(id)
 
         // Calculate and set progress
         const progress = data.progress || calculateProgress()
@@ -168,7 +263,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
   saveProgress: async (id: string, updates: Partial<ExtendedOTPDocument>) => {
     set({ isSaving: true })
     try {
-      const { role, staffType, step, verifications, otpValues, calculateProgress } = get()
+      const { role, staffType, step, verifications, uploadedFiles, otpValues, calculateProgress } = get()
       const verificationRef = doc(firestore, "verification", id)
 
       await runTransaction(firestore, async (transaction) => {
@@ -182,6 +277,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
               staffType,
               step,
               verifications,
+              uploadedFiles,
               otpValues,
               isCompleted: false,
               progress: 0,
@@ -213,6 +309,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
       })
     } catch (error) {
       console.error("Error saving progress:", error)
+      toast.error("Erreur lors de la sauvegarde")
     } finally {
       set({ isSaving: false })
     }
@@ -239,15 +336,70 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
     await saveProgress(id, { staffType: staff, step: 3 })
   },
 
-  // Toggle de vérification
+  // Toggle de vérification (annuler le fichier et la vérification)
   handleVerificationToggle: async (id: string, type: keyof typeof initialVerifications) => {
-    const { verifications, saveProgress } = get()
+    const { verifications, uploadedFiles, saveProgress, saveVerificationStatus } = get()
+
+    // Annuler la vérification et supprimer le fichier
     const newVerifications = {
       ...verifications,
-      [type]: !verifications[type],
+      [type]: false,
     }
-    set({ verifications: newVerifications })
-    await saveProgress(id, { verifications: newVerifications })
+
+    const newUploadedFiles = {
+      ...uploadedFiles,
+    }
+    delete newUploadedFiles[type]
+
+    set({ verifications: newVerifications, uploadedFiles: newUploadedFiles })
+    await saveProgress(id, { verifications: newVerifications, uploadedFiles: newUploadedFiles })
+
+    // Supprimer le statut de vérification
+    await saveVerificationStatus(id, type, { status: "pending" })
+
+    toast.success("Vérification annulée")
+  },
+
+  // Upload de fichier
+  handleFileUpload: async (id: string, type: keyof typeof initialVerifications, file: File) => {
+    const { uploadedFiles, saveProgress, saveVerificationStatus } = get()
+
+    try {
+      // Convert file to base64
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const fileData = e.target?.result as string
+
+        const newUploadedFiles = {
+          ...uploadedFiles,
+          [type]: {
+            fileName: file.name,
+            fileData: fileData,
+            uploadedAt: new Date(),
+          },
+        }
+
+        // NE PAS marquer comme vérifié automatiquement - rester en pending
+        set({ uploadedFiles: newUploadedFiles })
+        await saveProgress(id, { uploadedFiles: newUploadedFiles })
+
+        // Créer un statut "pending" dans la collection verifications
+        await saveVerificationStatus(id, type, {
+          status: "pending",
+        })
+
+        toast.success(`Fichier ${file.name} téléchargé avec succès - En attente de vérification`)
+      }
+
+      reader.onerror = () => {
+        toast.error("Erreur lors du téléchargement du fichier")
+      }
+
+      reader.readAsDataURL(file)
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      toast.error("Erreur lors du téléchargement du fichier")
+    }
   },
 
   // Changement OTP
@@ -270,7 +422,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
   handleSubmit: async (id: string) => {
     set({ isSaving: true })
     try {
-      const { role, staffType, step, verifications, otpValues, calculateProgress } = get()
+      const { role, staffType, step, verifications, uploadedFiles, otpValues, calculateProgress } = get()
 
       // Mark verification as completed using transaction
       await runTransaction(firestore, async (transaction) => {
@@ -284,6 +436,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
               staffType,
               step,
               verifications,
+              uploadedFiles,
               otpValues,
               progress: calculateProgress(),
               completedAt: null as any,
@@ -300,8 +453,10 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
 
       // Update local progress
       set({ progress: 100 })
+      toast.success("Vérification complétée avec succès!")
     } catch (error) {
       console.error("Error completing verification:", error)
+      toast.error("Erreur lors de la finalisation")
       set({ isSaving: false })
     }
   },
@@ -315,6 +470,8 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
       staffType: null,
       step: 1,
       verifications: initialVerifications,
+      verificationStatuses: initialVerificationStatuses,
+      uploadedFiles: initialUploadedFiles,
       otpValues: initialOtpValues,
       progress: 0,
     }),
@@ -332,12 +489,15 @@ export function Verification({ id }: { id: string }) {
     staffType,
     step,
     verifications,
+    verificationStatuses,
+    uploadedFiles,
     otpValues,
     progress,
     checkVerificationStatus,
     handleRoleSelect,
     handleStaffSelect,
     handleVerificationToggle,
+    handleFileUpload,
     handleOtpChange,
     handleSubmit,
     resetState,
@@ -376,6 +536,10 @@ export function Verification({ id }: { id: string }) {
     await handleVerificationToggle(id, type)
   }
 
+  const handleFileUploadWrapper = async (type: keyof typeof verifications, file: File) => {
+    await handleFileUpload(id, type, file)
+  }
+
   const handleOtpChangeWrapper = async (index: number, value: string) => {
     await handleOtpChange(id, index, value)
   }
@@ -389,7 +553,7 @@ export function Verification({ id }: { id: string }) {
   }
 
   const handleGoHome = () => {
-    // Empêcher le retour à la page d'accueil pendant la vérification
+    router.push("/")
     return
   }
 
@@ -425,10 +589,7 @@ export function Verification({ id }: { id: string }) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-teal-50 via-blue-50 to-cyan-50 flex items-center justify-center p-4">
         <div className="text-center max-w-sm w-full">
-          <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <Loader2 className="h-8 w-8 text-white animate-spin" />
-          </div>
-          <p className="text-gray-600 text-lg animate-pulse">Vérification du statut...</p>
+          <MedicalLoader />
         </div>
       </div>
     )
@@ -463,8 +624,11 @@ export function Verification({ id }: { id: string }) {
             role={role as "patient" | "personalMedical" | "admin"}
             staffType={staffType || undefined}
             verifications={verifications}
+            verificationStatuses={verificationStatuses}
+            uploadedFiles={uploadedFiles}
             otpValues={otpValues}
             onVerificationToggle={handleVerificationToggleWrapper}
+            onFileUpload={handleFileUploadWrapper}
             onOtpChange={handleOtpChangeWrapper}
             onSubmit={handleSubmitWrapper}
             onBack={handleBack}
