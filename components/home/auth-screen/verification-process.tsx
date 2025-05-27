@@ -12,59 +12,20 @@ import {
   X,
   Clock,
 } from "lucide-react"
-import type React from "react"
+import { CldUploadWidget } from "next-cloudinary"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { useRef } from "react"
 import toast from "react-hot-toast"
+import { VerificationFile, VerificationProcessProps } from "@/types"
 
 // Types basés sur votre fichier de types
 type StaffRole = "Doctor" | "Nurse" | "Surgeon" | "Anesthesiologist" | "Radiologist" | "Intern" | "Administrator"
 type VerificationStatus = "pending" | "verified" | "rejected"
 
-interface VerificationFile {
-  fileName: string
-  fileData: string // Base64 encoded file data
-  uploadedAt: Date
-}
 
-interface VerificationStatusItem {
-  status: VerificationStatus
-  verifiedAt?: Date
-  verifiedBy?: string
-}
-
-interface VerificationProcessProps {
-  role: "patient" | "personalMedical" | "admin"
-  staffType?: StaffRole
-  verifications: {
-    diplome: boolean
-    identite: boolean
-    structure: boolean
-  }
-  verificationStatuses: {
-    diplome?: VerificationStatusItem
-    identite?: VerificationStatusItem
-    structure?: VerificationStatusItem
-  }
-  uploadedFiles: {
-    diplome?: VerificationFile
-    identite?: VerificationFile
-    structure?: VerificationFile
-  }
-  otpValues: string[]
-  onVerificationToggle: (type: keyof VerificationProcessProps["verifications"]) => void
-  onFileUpload: (type: keyof VerificationProcessProps["verifications"], file: File) => void
-  onOtpChange: (index: number, value: string) => void
-  onSubmit: () => void
-  onBack: () => void
-  onGoHome: () => void
-  isSaving: boolean
-  progress: number
-}
 
 export function VerificationProcess({
   role,
@@ -82,12 +43,6 @@ export function VerificationProcess({
   isSaving,
   progress,
 }: VerificationProcessProps) {
-  const fileInputRefs = {
-    diplome: useRef<HTMLInputElement>(null),
-    identite: useRef<HTMLInputElement>(null),
-    structure: useRef<HTMLInputElement>(null),
-  }
-
   const isVerificationComplete = () => {
     if (role === "patient") return true
     if (role === "personalMedical") return verifications.diplome && verifications.identite && verifications.structure
@@ -111,7 +66,7 @@ export function VerificationProcess({
         Intern: "Interne",
         Administrator: "Administrateur médical",
       }
-      return labels[staffType]
+      return labels[staffType as StaffRole]
     }
     if (role === "admin") return "Administrateur"
     return "Personnel médical"
@@ -195,36 +150,53 @@ export function VerificationProcess({
     }
   }
 
-  const validateFileType = (file: File): boolean => {
-    const allowedTypes = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
-    return allowedTypes.includes(file.type)
+  const validateFileType = (resourceType: string, format: string): boolean => {
+    const allowedFormats = ["pdf", "jpg", "jpeg", "png", "gif", "webp"]
+    return (resourceType === "image" && allowedFormats.includes(format.toLowerCase())) || 
+           (resourceType === "raw" && format.toLowerCase() === "pdf")
   }
 
-  const validateFileSize = (file: File): boolean => {
+  const validateFileSize = (bytes: number): boolean => {
     const maxSize = 10 * 1024 * 1024 // 10MB
-    return file.size <= maxSize
+    return bytes <= maxSize
   }
 
-  const handleFileSelect = (type: keyof typeof verifications, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
 
+  const handleUploadSuccess = (type: keyof typeof verifications, result: any) => {
     // Validation du type de fichier
-    if (!validateFileType(file)) {
+    if (!validateFileType(result.info.resource_type, result.info.format)) {
       toast.error("Format de fichier non supporté. Veuillez utiliser PDF, JPEG, PNG, GIF ou WebP.")
-      event.target.value = ""
       return
     }
 
     // Validation de la taille
-    if (!validateFileSize(file)) {
+    if (!validateFileSize(result.info.bytes)) {
       toast.error("Le fichier est trop volumineux. Taille maximale : 10MB.")
-      event.target.value = ""
       return
     }
 
-    onFileUpload(type, file)
-    event.target.value = ""
+    const fileData: VerificationFile = {
+      fileName: result.info.original_filename || result.info.public_id,
+      fileUrl: result.info.secure_url,
+      publicId: result.info.public_id,
+      uploadedAt: new Date(),
+      fileSize: result.info.bytes,
+      fileType: result.info.format,
+    }
+
+    onFileUpload(type, fileData)
+  }
+
+  const handleUploadError = (error: any) => {
+    console.error("Upload error:", error)
+    toast.error("Erreur lors du téléchargement du fichier")
   }
 
   const handleRemoveFile = (type: keyof typeof verifications) => {
@@ -252,7 +224,6 @@ export function VerificationProcess({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-blue-50 to-cyan-50 p-2 sm:p-4">
-      
       <div className="max-w-4xl mx-auto pt-4 sm:pt-8">
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 relative">
@@ -351,17 +322,17 @@ export function VerificationProcess({
                     <div key={item.key}>
                       <div
                         className={`
-        p-4 sm:p-6 rounded-xl sm:rounded-2xl transition-all duration-300 border-2 shadow-lg
-        ${status.color.bg}
-      `}
+                        p-4 sm:p-6 rounded-xl sm:rounded-2xl transition-all duration-300 border-2 shadow-lg
+                        ${status.color.bg}
+                      `}
                       >
                         {/* Header avec icône et titre */}
                         <div className="flex items-center space-x-3 sm:space-x-4 mb-3">
                           <div
                             className={`
-            w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-300 shadow-lg flex-shrink-0
-            ${status.color.icon}
-          `}
+                            w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-300 shadow-lg flex-shrink-0
+                            ${status.color.icon}
+                          `}
                           >
                             <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                           </div>
@@ -386,8 +357,20 @@ export function VerificationProcess({
                             <div className="text-xs sm:text-sm text-gray-600 space-y-1">
                               <p className="font-medium truncate">📄 {uploadedFile.fileName}</p>
                               <p>📅 Uploadé le: {new Date(uploadedFile.uploadedAt).toLocaleDateString()}</p>
+                              <p>📏 Taille: {formatFileSize(uploadedFile.fileSize)}</p>
+                              <p>🔗 Type: {uploadedFile.fileType}</p>
                               {statusItem?.verifiedAt && (
                                 <p>✅ Vérifié le: {new Date(statusItem.verifiedAt).toLocaleDateString()}</p>
+                              )}
+                              {uploadedFile.fileUrl && (
+                                <a
+                                  href={uploadedFile.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  👁️ Voir le fichier
+                                </a>
                               )}
                             </div>
                           </div>
@@ -395,24 +378,24 @@ export function VerificationProcess({
 
                         {/* Actions - boutons */}
                         <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-3 mb-3">
-                          <input
-                            ref={fileInputRefs[item.key]}
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                            onChange={(e) => handleFileSelect(item.key, e)}
-                            className="hidden"
-                          />
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => fileInputRefs[item.key].current?.click()}
-                            className="flex items-center justify-center gap-2 w-full sm:w-auto text-xs sm:text-sm py-2"
-                            disabled={statusItem?.status === "verified"}
+                          <CldUploadWidget
+                            signatureEndpoint="/api/sign-image"
+                            onSuccess={(result) => handleUploadSuccess(item.key, result)}
+                            onError={handleUploadError}
                           >
-                            <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span>{uploadedFile ? "Changer le fichier" : "Télécharger un fichier"}</span>
-                          </Button>
+                            {({ open }) => (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => open()}
+                                className="flex items-center justify-center gap-2 w-full sm:w-auto text-xs sm:text-sm py-2"
+                                disabled={statusItem?.status === "verified"}
+                              >
+                                <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                                <span>{uploadedFile ? "Changer le fichier" : "Télécharger un fichier"}</span>
+                              </Button>
+                            )}
+                          </CldUploadWidget>
 
                           {uploadedFile && statusItem?.status !== "verified" && (
                             <Button
@@ -493,17 +476,18 @@ export function VerificationProcess({
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }
                 `}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin mr-2" />
-                    <span className="text-sm sm:text-base">Finalisation...</span>
-                  </>
-                ) : (
-                  <span className="text-sm sm:text-base">Confirmer la vérification</span>
-                )}
-              </Button>
-            </div>
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin mr-2" />
+                      <span className="text-sm sm:text-base">Finalisation...</span>
+                    </>
+                  ) : (
+                    <span className="text-sm sm:text-base">Confirmer la vérification</span>
+                  )}
+                </Button>
+              </div>
+            
           </>
         )}
       </div>
@@ -518,6 +502,7 @@ export function VerificationProcess({
         <p className="text-xs sm:text-sm text-gray-500">Étape 3 sur 3</p>
       </div>
     </div>
-    </div>
-  )
+  </div>
+   
+  );
 }

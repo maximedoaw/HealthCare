@@ -3,9 +3,8 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { create } from "zustand"
-import { doc, getDoc, runTransaction, setDoc } from "firebase/firestore"
+import { doc, getDoc, runTransaction, Timestamp } from "firebase/firestore"
 import { firestore } from "@/firebase/config"
-import type { OTPDocument } from "@/types"
 import toast from "react-hot-toast"
 
 import { RoleSelection } from "./role-selection"
@@ -19,8 +18,11 @@ type VerificationStatus = "pending" | "verified" | "rejected"
 
 interface VerificationFile {
   fileName: string
-  fileData: string // Base64 encoded file data
+  fileUrl: string // URL Cloudinary au lieu de base64
+  publicId: string // ID public Cloudinary
   uploadedAt: Date
+  fileSize: number
+  fileType: string
 }
 
 interface VerificationStatusItem {
@@ -29,13 +31,39 @@ interface VerificationStatusItem {
   verifiedBy?: string
 }
 
-interface ExtendedOTPDocument extends OTPDocument {
+// Interface consolidée pour la collection "verifications"
+interface VerificationDocument {
+  // Données de base du processus
+  otpValues: string[]
+  role: "patient" | "personalMedical" | "admin"
+  progress: number
+  completedAt: Timestamp | null
+  step: number
+  verifications: {
+    structure: boolean
+    identite: boolean
+    diplome: boolean
+  }
+  isCompleted: boolean
+
+  // Données étendues
   staffType?: StaffRole
   uploadedFiles?: {
     diplome?: VerificationFile
     identite?: VerificationFile
     structure?: VerificationFile
   }
+
+  // Statuts de vérification
+  verificationStatuses?: {
+    diplome?: VerificationStatusItem
+    identite?: VerificationStatusItem
+    structure?: VerificationStatusItem
+  }
+
+  // Métadonnées
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 interface VerificationState {
@@ -86,17 +114,11 @@ interface VerificationState {
   // Actions complexes
   calculateProgress: () => number
   checkVerificationStatus: (id: string) => Promise<boolean>
-  loadVerificationStatuses: (id: string) => Promise<void>
-  saveProgress: (id: string, updates: Partial<ExtendedOTPDocument>) => Promise<void>
-  saveVerificationStatus: (
-    id: string,
-    type: keyof typeof initialVerifications,
-    status: VerificationStatusItem,
-  ) => Promise<void>
+  saveProgress: (id: string, updates: Partial<VerificationDocument>) => Promise<void>
   handleRoleSelect: (id: string, value: "patient" | "personalMedical" | "admin") => Promise<void>
   handleStaffSelect: (id: string, staff: StaffRole) => Promise<void>
   handleVerificationToggle: (id: string, type: keyof typeof initialVerifications) => Promise<void>
-  handleFileUpload: (id: string, type: keyof typeof initialVerifications, file: File) => Promise<void>
+  handleFileUpload: (id: string, type: keyof typeof initialVerifications, fileData: VerificationFile) => Promise<void>
   handleOtpChange: (id: string, index: number, value: string) => Promise<void>
   handleSubmit: (id: string) => Promise<void>
   resetState: () => void
@@ -180,51 +202,14 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
     return 0
   },
 
-  // Charger les statuts de vérification depuis la collection verifications
-  loadVerificationStatuses: async (id: string) => {
-    try {
-      const verificationStatusRef = doc(firestore, "verifications", id)
-      const verificationStatusSnap = await getDoc(verificationStatusRef)
-
-      if (verificationStatusSnap.exists()) {
-        const statusData = verificationStatusSnap.data()
-        set({ verificationStatuses: statusData })
-      }
-    } catch (error) {
-      console.error("Error loading verification statuses:", error)
-    }
-  },
-
-  // Sauvegarder le statut de vérification dans la collection verifications
-  saveVerificationStatus: async (
-    id: string,
-    type: keyof typeof initialVerifications,
-    status: VerificationStatusItem,
-  ) => {
-    try {
-      const { verificationStatuses } = get()
-      const newStatuses = {
-        ...verificationStatuses,
-        [type]: status,
-      }
-
-      const verificationStatusRef = doc(firestore, "verifications", id)
-      await setDoc(verificationStatusRef, newStatuses, { merge: true })
-
-      set({ verificationStatuses: newStatuses })
-    } catch (error) {
-      console.error("Error saving verification status:", error)
-    }
-  },
-
-  // Vérification du statut
+  // Vérification du statut depuis la collection unique "verifications"
   checkVerificationStatus: async (id: string) => {
     try {
-      const verificationRef = doc(firestore, "verification", id)
+      const verificationRef = doc(firestore, "verifications", id)
       const verificationSnap = await getDoc(verificationRef)
 
       if (verificationSnap.exists()) {
-        const data = verificationSnap.data() as ExtendedOTPDocument
+        const data = verificationSnap.data() as VerificationDocument
 
         // If verification is completed, return true to redirect
         if (data.isCompleted) {
@@ -232,18 +217,16 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
         }
 
         // Restore previous progress
-        const { calculateProgress, loadVerificationStatuses } = get()
+        const { calculateProgress } = get()
         set({
           role: data.role,
           staffType: data.staffType || null,
           step: data.step,
           verifications: data.verifications,
+          verificationStatuses: data.verificationStatuses || {},
           uploadedFiles: data.uploadedFiles || {},
           otpValues: data.otpValues,
         })
-
-        // Load verification statuses from verifications collection
-        await loadVerificationStatuses(id)
 
         // Calculate and set progress
         const progress = data.progress || calculateProgress()
@@ -259,34 +242,47 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
     }
   },
 
-  // Sauvegarde du progrès
-  saveProgress: async (id: string, updates: Partial<ExtendedOTPDocument>) => {
+  // Sauvegarde du progrès dans la collection unique "verifications"
+  saveProgress: async (id: string, updates: Partial<VerificationDocument>) => {
     set({ isSaving: true })
     try {
-      const { role, staffType, step, verifications, uploadedFiles, otpValues, calculateProgress } = get()
-      const verificationRef = doc(firestore, "verification", id)
+      const {
+        role,
+        staffType,
+        step,
+        verifications,
+        verificationStatuses,
+        uploadedFiles,
+        otpValues,
+        calculateProgress,
+      } = get()
+      const verificationRef = doc(firestore, "verifications", id)
 
       await runTransaction(firestore, async (transaction) => {
         const verificationDoc = await transaction.get(verificationRef)
 
         // Prepare data to save
         const existingData = verificationDoc.exists()
-          ? (verificationDoc.data() as ExtendedOTPDocument)
+          ? (verificationDoc.data() as VerificationDocument)
           : {
-              role,
+              role: role as "patient" | "personalMedical" | "admin",
               staffType,
               step,
               verifications,
+              verificationStatuses,
               uploadedFiles,
               otpValues,
               isCompleted: false,
               progress: 0,
-              completedAt: null as any,
+              completedAt: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
             }
 
         const newData = {
           ...existingData,
           ...updates,
+          updatedAt: new Date(),
         }
 
         // Calculate and update progress
@@ -338,7 +334,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
 
   // Toggle de vérification (annuler le fichier et la vérification)
   handleVerificationToggle: async (id: string, type: keyof typeof initialVerifications) => {
-    const { verifications, uploadedFiles, saveProgress, saveVerificationStatus } = get()
+    const { verifications, verificationStatuses, uploadedFiles, saveProgress } = get()
 
     // Annuler la vérification et supprimer le fichier
     const newVerifications = {
@@ -351,51 +347,56 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
     }
     delete newUploadedFiles[type]
 
-    set({ verifications: newVerifications, uploadedFiles: newUploadedFiles })
-    await saveProgress(id, { verifications: newVerifications, uploadedFiles: newUploadedFiles })
+    const newVerificationStatuses = {
+      ...verificationStatuses,
+    }
+    delete newVerificationStatuses[type]
 
-    // Supprimer le statut de vérification
-    await saveVerificationStatus(id, type, { status: "pending" })
+    set({
+      verifications: newVerifications,
+      uploadedFiles: newUploadedFiles,
+      verificationStatuses: newVerificationStatuses,
+    })
+
+    await saveProgress(id, {
+      verifications: newVerifications,
+      uploadedFiles: newUploadedFiles,
+      verificationStatuses: newVerificationStatuses,
+    })
 
     toast.success("Vérification annulée")
   },
 
-  // Upload de fichier
-  handleFileUpload: async (id: string, type: keyof typeof initialVerifications, file: File) => {
-    const { uploadedFiles, saveProgress, saveVerificationStatus } = get()
+  // Upload de fichier avec Cloudinary
+  handleFileUpload: async (id: string, type: keyof typeof initialVerifications, fileData: VerificationFile) => {
+    const { verifications, verificationStatuses, uploadedFiles, saveProgress } = get()
 
     try {
-      // Convert file to base64
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const fileData = e.target?.result as string
-
-        const newUploadedFiles = {
-          ...uploadedFiles,
-          [type]: {
-            fileName: file.name,
-            fileData: fileData,
-            uploadedAt: new Date(),
-          },
-        }
-
-        // NE PAS marquer comme vérifié automatiquement - rester en pending
-        set({ uploadedFiles: newUploadedFiles })
-        await saveProgress(id, { uploadedFiles: newUploadedFiles })
-
-        // Créer un statut "pending" dans la collection verifications
-        await saveVerificationStatus(id, type, {
-          status: "pending",
-        })
-
-        toast.success(`Fichier ${file.name} téléchargé avec succès - En attente de vérification`)
+      const newUploadedFiles = {
+        ...uploadedFiles,
+        [type]: fileData,
       }
 
-      reader.onerror = () => {
-        toast.error("Erreur lors du téléchargement du fichier")
+      // Créer un statut "pending" pour le fichier uploadé
+      const newVerificationStatuses = {
+        ...verificationStatuses,
+        [type]: {
+          status: "pending" as VerificationStatus,
+        },
       }
 
-      reader.readAsDataURL(file)
+      // NE PAS marquer comme vérifié automatiquement - rester en pending
+      set({
+        uploadedFiles: newUploadedFiles,
+        verificationStatuses: newVerificationStatuses,
+      })
+
+      await saveProgress(id, {
+        uploadedFiles: newUploadedFiles,
+        verificationStatuses: newVerificationStatuses,
+      })
+
+      toast.success(`Fichier ${fileData.fileName} téléchargé avec succès - En attente de vérification`)
     } catch (error) {
       console.error("Error uploading file:", error)
       toast.error("Erreur lors du téléchargement du fichier")
@@ -422,32 +423,45 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
   handleSubmit: async (id: string) => {
     set({ isSaving: true })
     try {
-      const { role, staffType, step, verifications, uploadedFiles, otpValues, calculateProgress } = get()
+      const {
+        role,
+        staffType,
+        step,
+        verifications,
+        verificationStatuses,
+        uploadedFiles,
+        otpValues,
+        calculateProgress,
+      } = get()
 
       // Mark verification as completed using transaction
       await runTransaction(firestore, async (transaction) => {
-        const verificationRef = doc(firestore, "verification", id)
+        const verificationRef = doc(firestore, "verifications", id)
         const verificationDoc = await transaction.get(verificationRef)
 
         const existingData = verificationDoc.exists()
-          ? (verificationDoc.data() as ExtendedOTPDocument)
+          ? (verificationDoc.data() as VerificationDocument)
           : {
-              role,
+              role: role as "patient" | "personalMedical" | "admin",
               staffType,
               step,
               verifications,
+              verificationStatuses,
               uploadedFiles,
               otpValues,
               progress: calculateProgress(),
-              completedAt: null as any,
+              completedAt: null,
               isCompleted: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
             }
 
         transaction.set(verificationRef, {
           ...existingData,
           isCompleted: true,
-          completedAt: new Date(),
+          completedAt: Timestamp.now(),
           progress: 100,
+          updatedAt: new Date(),
         })
       })
 
@@ -536,8 +550,8 @@ export function Verification({ id }: { id: string }) {
     await handleVerificationToggle(id, type)
   }
 
-  const handleFileUploadWrapper = async (type: keyof typeof verifications, file: File) => {
-    await handleFileUpload(id, type, file)
+  const handleFileUploadWrapper = async (type: keyof typeof verifications, fileData: VerificationFile) => {
+    await handleFileUpload(id, type, fileData)
   }
 
   const handleOtpChangeWrapper = async (index: number, value: string) => {

@@ -146,3 +146,47 @@ export declare interface PatientHealthForm {
   bloodType: string
   insuranceNumber: string
 }
+
+export interface VerificationFile {
+  fileName: string
+  fileUrl: string // URL Cloudinary au lieu de base64
+  publicId: string // ID public Cloudinary
+  uploadedAt: Date
+  fileSize: number
+  fileType: string
+}
+
+export interface VerificationStatusItem {
+  status: VerificationStatus
+  verifiedAt?: Date
+  verifiedBy?: string
+}
+
+export interface VerificationProcessProps {
+  role: "patient" | "personalMedical" | "admin"
+  staffType?: StaffRole
+  verifications: {
+    diplome: boolean
+    identite: boolean
+    structure: boolean
+  }
+  verificationStatuses: {
+    diplome?: VerificationStatusItem
+    identite?: VerificationStatusItem
+    structure?: VerificationStatusItem
+  }
+  uploadedFiles: {
+    diplome?: VerificationFile
+    identite?: VerificationFile
+    structure?: VerificationFile
+  }
+  otpValues: string[]
+  onVerificationToggle: (type: keyof VerificationProcessProps["verifications"]) => void
+  onFileUpload: (type: keyof VerificationProcessProps["verifications"], fileData: VerificationFile) => void
+  onOtpChange: (index: number, value: string) => void
+  onSubmit: () => void
+  onBack: () => void
+  onGoHome: () => void
+  isSaving: boolean
+  progress: number
+}
