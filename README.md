@@ -1,5 +1,5 @@
 [x]Landing page
-[]Authentification
+[x]Authentification
 []Choix du médécin et rendez vous fixez
 []Constitution du dossier médicale du patient et production d'ordonnance
 []Notifier au medecin qu'il a rendez vous avec un patient

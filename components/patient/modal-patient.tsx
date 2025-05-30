@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { X } from "lucide-react"
 import { useForm } from "react-hook-form"
 import toast from "react-hot-toast"
-import { usePatientModalStore } from "@/store/patients-modal-store"
+import { usePatientModalStore } from "@/store/usePatientModal"
 import { useState } from "react"
 import { PatientHealthForm } from "@/types"
 import { PhysicalActivityLevel, SmokingStatus } from "@/types/medical"

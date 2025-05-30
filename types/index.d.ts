@@ -4,8 +4,10 @@
 import { Timestamp } from "firebase/firestore";
 import { MedicalOperationType, MedicalPermissionLevel, MedicalStaffRole } from "./medical";
 
-// Enumération des rôles du personnel médical
+type User = () => any
 
+type StaffRole = "Doctor" | "Nurse" | "Surgeon" | "Anesthesiologist" | "Radiologist" | "Intern" | "Administrator"
+type VerificationStatus = "pending" | "verified" | "rejected"
 
 // Interface de base pour le personnel médical
 export interface MedicalStaff {
@@ -84,6 +86,7 @@ export interface Treatment {
 }
 
 export interface OTPDocument {
+  name?: string;
   otpValues: string[]; // Tableau de 6 chaînes vides
   role: 'patient' | 'personalMedical' | 'admin'; // Le rôle semble être "patient" mais pourrait être autre chose
   progress: number; // Valeur numérique entre 0 et 100
@@ -189,4 +192,18 @@ export interface VerificationProcessProps {
   onGoHome: () => void
   isSaving: boolean
   progress: number
+}
+
+export declare interface VerificationDocument extends Omit<VerificationProcessProps, 
+  'onVerificationToggle' | 'onFileUpload' | 'onOtpChange' | 'onSubmit' | 'onBack' | 'onGoHome' | 'isSaving'
+> {
+  // Données supplémentaires spécifiques à VerificationDocument
+  name?: string;
+  completedAt: Timestamp | null;
+  step: number;
+  isCompleted: boolean;
+  
+  // Métadonnées
+  createdAt?: Date;
+  updatedAt?: Date;
 }

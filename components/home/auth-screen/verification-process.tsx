@@ -19,13 +19,11 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import toast from "react-hot-toast"
-import { VerificationFile, VerificationProcessProps } from "@/types"
+import type { VerificationFile, VerificationProcessProps } from "@/types"
 
 // Types basés sur votre fichier de types
 type StaffRole = "Doctor" | "Nurse" | "Surgeon" | "Anesthesiologist" | "Radiologist" | "Intern" | "Administrator"
 type VerificationStatus = "pending" | "verified" | "rejected"
-
-
 
 export function VerificationProcess({
   role,
@@ -75,8 +73,9 @@ export function VerificationProcess({
   const getVerificationStatus = (type: keyof typeof verifications) => {
     const hasFile = !!uploadedFiles[type]
     const statusItem = verificationStatuses[type]
-    const isVerified = verifications[type]
+    const isVerified = verifications[type] // Utiliser directement la valeur booléenne
 
+    // Pas de fichier uploadé
     if (!hasFile) {
       return {
         status: "no-file",
@@ -91,23 +90,8 @@ export function VerificationProcess({
       }
     }
 
-    // Si le fichier est uploadé mais pas encore vérifié
-    if (hasFile && !isVerified) {
-      return {
-        status: "pending",
-        color: {
-          bg: "bg-orange-50 border-orange-200",
-          icon: "bg-orange-500",
-          text: "text-orange-700",
-          badge: "bg-orange-500",
-        },
-        label: "En attente de vérification",
-        icon: Clock,
-      }
-    }
-
-    // Si vérifié et approuvé
-    if (hasFile && isVerified && statusItem?.status === "verified") {
+    // Si vérifié (utiliser verifications.diplome/identite/structure)
+    if (hasFile && isVerified) {
       return {
         status: "verified",
         color: {
@@ -121,8 +105,8 @@ export function VerificationProcess({
       }
     }
 
-    // Si vérifié mais rejeté
-    if (hasFile && statusItem?.status === "rejected") {
+    // Si rejeté explicitement via verificationStatuses
+    if (hasFile && !isVerified && statusItem?.status === "rejected") {
       return {
         status: "rejected",
         color: {
@@ -133,6 +117,21 @@ export function VerificationProcess({
         },
         label: "Rejeté",
         icon: X,
+      }
+    }
+
+    // Si le fichier est uploadé mais pas encore vérifié (verifications.xxx = false)
+    if (hasFile && !isVerified) {
+      return {
+        status: "pending",
+        color: {
+          bg: "bg-orange-50 border-orange-200",
+          icon: "bg-orange-500",
+          text: "text-orange-700",
+          badge: "bg-orange-500",
+        },
+        label: "En attente de vérification",
+        icon: Clock,
       }
     }
 
@@ -152,8 +151,10 @@ export function VerificationProcess({
 
   const validateFileType = (resourceType: string, format: string): boolean => {
     const allowedFormats = ["pdf", "jpg", "jpeg", "png", "gif", "webp"]
-    return (resourceType === "image" && allowedFormats.includes(format.toLowerCase())) || 
-           (resourceType === "raw" && format.toLowerCase() === "pdf")
+    return (
+      (resourceType === "image" && allowedFormats.includes(format.toLowerCase())) ||
+      (resourceType === "raw" && format.toLowerCase() === "pdf")
+    )
   }
 
   const validateFileSize = (bytes: number): boolean => {
@@ -254,9 +255,7 @@ export function VerificationProcess({
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 mb-2 px-4">
             Vérification - {getRoleLabel()}
           </h1>
-          <p className="text-sm sm:text-base lg:text-lg text-gray-600 px-4">
-            Complétez les étapes de vérification
-          </p>
+          <p className="text-sm sm:text-base lg:text-lg text-gray-600 px-4">Complétez les étapes de vérification</p>
 
           {/* Progress bar */}
           <div className="mt-4 sm:mt-6 max-w-xs sm:max-w-md mx-auto px-4">
@@ -345,7 +344,9 @@ export function VerificationProcess({
 
                         {/* Badge de statut - ligne séparée */}
                         <div className="mb-3 sm:mb-4">
-                          <Badge className={`transition-all duration-300 text-white ${status.color.badge} text-xs sm:text-sm inline-flex items-center`}>
+                          <Badge
+                            className={`transition-all duration-300 text-white ${status.color.badge} text-xs sm:text-sm inline-flex items-center`}
+                          >
                             <StatusIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                             <span>{status.label}</span>
                           </Badge>
@@ -437,9 +438,7 @@ export function VerificationProcess({
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
                       <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
                     </div>
-                    <Label className="text-base sm:text-lg font-medium text-gray-800">
-                      Code secret administrateur
-                    </Label>
+                    <Label className="text-base sm:text-lg font-medium text-gray-800">Code secret administrateur</Label>
                   </div>
 
                   <div className="flex justify-center space-x-2 sm:space-x-3 overflow-x-auto pb-2">
@@ -487,22 +486,20 @@ export function VerificationProcess({
                   )}
                 </Button>
               </div>
-            
-          </>
-        )}
-      </div>
-
-      {/* Progress indicator */}
-      <div className="mt-6 sm:mt-8 text-center">
-        <div className="flex justify-center space-x-2 mb-2 sm:mb-4">
-          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
-          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
-          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
+            </>
+          )}
         </div>
-        <p className="text-xs sm:text-sm text-gray-500">Étape 3 sur 3</p>
+
+        {/* Progress indicator */}
+        <div className="mt-6 sm:mt-8 text-center">
+          <div className="flex justify-center space-x-2 mb-2 sm:mb-4">
+            <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
+            <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
+            <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal-500 rounded-full"></div>
+          </div>
+          <p className="text-xs sm:text-sm text-gray-500">Étape 3 sur 3</p>
+        </div>
       </div>
     </div>
-  </div>
-   
-  );
+  )
 }

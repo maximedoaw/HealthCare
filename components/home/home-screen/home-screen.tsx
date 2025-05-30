@@ -8,7 +8,7 @@ import { AIAssistantDialog } from "@/components/patient/ai-assistant-dialog";
 import { useState } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "@/firebase/config";
-import { useModalDoctorStore } from "@/store/doctor-modal-store";
+import { useModalDoctorStore } from "@/store/useDoctorModalStore";
 import { PatientModal } from "@/components/patient/modal-patient";
 import DoctorModal from "@/components/Users/modal-doctor";
 

@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useModalDoctorStore } from "@/store/doctor-modal-store"
+import { useModalDoctorStore } from "@/store/useDoctorModalStore"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { useState } from "react"

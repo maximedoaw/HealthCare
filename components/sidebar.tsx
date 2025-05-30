@@ -32,13 +32,13 @@ export function Sidebar() {
       href: "/dashboard", 
       icon: FolderDot, 
       label: "Dashboard",
-      visible: !isPatient
+      visible: isPatient
     },
     { 
       href: "/patients", 
       icon: Stethoscope, 
       label: "Patients",
-      visible: !isPatient // Seulement visible pour les médecins/admin
+      visible: isPatient // Seulement visible pour les médecins/admin
     },
     { 
       href: "/records", 
@@ -62,7 +62,7 @@ export function Sidebar() {
       href: "/schedule", 
       icon: CalendarPlus, 
       label: "Prendre RDV",
-      visible: isPatient // Seulement visible pour les patients
+      visible: !isPatient // Seulement visible pour les patients
     }
   ]
 

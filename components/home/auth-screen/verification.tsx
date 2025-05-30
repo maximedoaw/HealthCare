@@ -4,36 +4,25 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { create } from "zustand"
 import { doc, getDoc, runTransaction, Timestamp } from "firebase/firestore"
-import { firestore } from "@/firebase/config"
+import { auth, firestore } from "@/firebase/config"
 import toast from "react-hot-toast"
 
 import { RoleSelection } from "./role-selection"
 import { StaffSelection } from "./staff-selection"
 import { VerificationProcess } from "./verification-process"
 import { MedicalLoader } from "@/components/medical-loader"
+import { VerificationFile, VerificationStatusItem } from "@/types"
 
 // Types
 type StaffRole = "Doctor" | "Nurse" | "Surgeon" | "Anesthesiologist" | "Radiologist" | "Intern" | "Administrator"
 type VerificationStatus = "pending" | "verified" | "rejected"
 
-interface VerificationFile {
-  fileName: string
-  fileUrl: string // URL Cloudinary au lieu de base64
-  publicId: string // ID public Cloudinary
-  uploadedAt: Date
-  fileSize: number
-  fileType: string
-}
 
-interface VerificationStatusItem {
-  status: VerificationStatus
-  verifiedAt?: Date
-  verifiedBy?: string
-}
 
 // Interface consolidée pour la collection "verifications"
 interface VerificationDocument {
   // Données de base du processus
+  name?: string
   otpValues: string[]
   role: "patient" | "personalMedical" | "admin"
   progress: number
@@ -164,7 +153,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
 
   // Calcul du progrès
   calculateProgress: () => {
-    const { role, step, staffType, verifications, otpValues } = get()
+    const { role, step, staffType, verifications, otpValues} = get()
 
     if (!role) return 0
 
@@ -265,6 +254,7 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
         const existingData = verificationDoc.exists()
           ? (verificationDoc.data() as VerificationDocument)
           : {
+              name: "",
               role: role as "patient" | "personalMedical" | "admin",
               staffType,
               step,
@@ -494,7 +484,6 @@ const useVerificationStore = create<VerificationState>((set, get) => ({
 // Composant principal
 export function Verification({ id }: { id: string }) {
   const router = useRouter()
-
   // État depuis Zustand
   const {
     isLoading,

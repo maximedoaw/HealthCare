@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { usePatientModalStore } from "@/store/patients-modal-store"
+import { usePatientModalStore } from "@/store/usePatientModal"
 import { 
   Activity, 
   Heart, 

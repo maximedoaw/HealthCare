@@ -3,7 +3,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Heart, Menu, X } from "lucide-react"
 import { AuthForm } from "./home/auth-screen/auth-form"
-import { useAuthStore } from "@/store/auth-store"
+import { useAuthStore } from "@/store/useAuthStore"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
