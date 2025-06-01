@@ -78,6 +78,7 @@ export default function VerificationDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
   const [filterStatus, setFilterStatus] = useState<"all" | "verified" | "pending" | "rejected">("all")
+  const [fileDocument, setFileDocument] = useState<{diplome: string | null, identite: string | null, structure: string | null} | null>(null)
 
   // Charger les documents et utilisateurs depuis Firestore
   useEffect(() => {
@@ -93,6 +94,13 @@ export default function VerificationDashboard() {
           const data = doc.data()
           // Filtrer uniquement les documents avec le rôle personalMedical
           if (data.role === "personalMedical") {
+            console.log(data);
+            setFileDocument({
+              diplome: data.uploadedFiles?.diplome?.fileUrl || null,
+              identite: data.uploadedFiles?.identite?.fileUrl || null,
+              structure: data.uploadedFiles?.structure?.fileUrl || null
+            })
+            
             // Mettre automatiquement tous les paramètres de vérification à true
             const updatedData = {
               ...data,
@@ -601,15 +609,6 @@ export default function VerificationDashboard() {
                                 </p>
                               </div>
                             </div>
-                            <Link
-                              href={currentDocument.uploadedFiles[activeTab]?.url || "#"}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-white hover:bg-accent hover:text-accent-foreground h-9 px-3 w-full sm:w-auto"
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              Ouvrir le document
-                            </Link>
                           </div>
                         </div>
                       ) : (
@@ -680,7 +679,19 @@ export default function VerificationDashboard() {
                           Vérifié par: {currentDocument.verificationStatuses.diplome.verifiedBy}
                         </p>
                       )}
-                      <Progress value={currentDocument.verifications.diplome ? 100 : 0} className="h-3" />
+                      <div className="flex justify-between items-center">
+                        <Progress value={currentDocument.verifications.diplome ? 100 : 0} className="h-3 flex-1 mr-2" />
+                        {fileDocument?.diplome && (
+                          <Link
+                            href={fileDocument.diplome}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
 
                     <div className="border rounded-lg p-4 sm:p-6 bg-gradient-to-br from-green-50 to-green-100">
@@ -697,7 +708,19 @@ export default function VerificationDashboard() {
                           Vérifié par: {currentDocument.verificationStatuses.identite.verifiedBy}
                         </p>
                       )}
-                      <Progress value={currentDocument.verifications.identite ? 100 : 0} className="h-3" />
+                      <div className="flex justify-between items-center">
+                        <Progress value={currentDocument.verifications.identite ? 100 : 0} className="h-3 flex-1 mr-2" />
+                        {fileDocument?.identite && (
+                          <Link
+                            href={fileDocument.identite}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
 
                     <div className="border rounded-lg p-4 sm:p-6 bg-gradient-to-br from-purple-50 to-purple-100">
@@ -714,7 +737,19 @@ export default function VerificationDashboard() {
                           Vérifié par: {currentDocument.verificationStatuses.structure.verifiedBy}
                         </p>
                       )}
-                      <Progress value={currentDocument.verifications.structure ? 100 : 0} className="h-3" />
+                      <div className="flex justify-between items-center">
+                        <Progress value={currentDocument.verifications.structure ? 100 : 0} className="h-3 flex-1 mr-2" />
+                        {fileDocument?.structure && (
+                          <Link
+                            href={fileDocument.structure}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-purple-600 hover:text-purple-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
